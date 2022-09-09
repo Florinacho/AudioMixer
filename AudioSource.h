@@ -22,9 +22,9 @@ class AudioSource {
 	
 public:
 	enum {
-		AS_STOP,
-		AS_PLAY,
-		AS_PAUSE,
+		STOP,
+		PLAY,
+		PAUSE,
 	};
 	
 	void setBuffer(AudioBuffer* buffer);

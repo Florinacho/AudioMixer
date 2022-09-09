@@ -37,10 +37,10 @@ void* AudioThreadProc(void* params) {
 			AudioBuffer* buffer = source->getBuffer();
 			
 			switch (source->getStatus()) { 
-			case AudioSource::AS_PLAY:
+			case AudioSource::PLAY:
 				const uint8_t* sampleBuffer = buffer->getData();
 				const uint32_t position = source->getPosition();
-				source->setPosition(position + (int)((float)mixer->blockSize * source->getSpeed()));
+				source->setPosition(position + (float)mixer->blockSize * source->getSpeed());
 
 				if (source->getPosition() >= buffer->getLength()) {
 					source->stop();

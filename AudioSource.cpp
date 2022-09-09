@@ -3,7 +3,7 @@
 #include <algorithm>
 
 AudioSource::AudioSource(AudioBuffer* newBuffer) 
-	: buffer(nullptr), position(0), volume(1.0), pan(0.5f), speed(1.0f), status(AS_STOP), loop(false) {
+	: buffer(nullptr), position(0), volume(1.0), pan(0.5f), speed(1.0f), status(STOP), loop(false) {
 	setBuffer(newBuffer);
 }
 
@@ -21,12 +21,12 @@ AudioBuffer* AudioSource::getBuffer() const {
 
 bool AudioSource::play() {
 	switch (status) {
-	case AS_STOP :
-		status = AS_PLAY;
+	case STOP :
+		status = PLAY;
 		position = 0;
 		return true;
-	case AS_PAUSE :
-		status = AS_PLAY;
+	case PAUSE :
+		status = PLAY;
 		return true;
 	}
 	return false;
@@ -34,8 +34,8 @@ bool AudioSource::play() {
 
 bool AudioSource::pause() {
 	switch (status) {
-	case AS_PLAY :
-		status = AS_PAUSE;
+	case PLAY :
+		status = PAUSE;
 		return true;
 	}
 	return false;
@@ -43,9 +43,9 @@ bool AudioSource::pause() {
 
 bool AudioSource::stop() {
 	switch (status) {
-	case AS_PLAY :
-	case AS_PAUSE :
-		status = AS_STOP;
+	case PLAY :
+	case PAUSE :
+		status = STOP;
 		position = 0;
 		return true;
 	}
@@ -53,7 +53,7 @@ bool AudioSource::stop() {
 }
 
 bool AudioSource::finished() {
-	return (status == AS_STOP);
+	return (status == STOP);
 }
 
 uint8_t AudioSource::getStatus() const {
@@ -96,8 +96,8 @@ void AudioSource::setPosition(uint32_t value) {
 	position = std::max(0u, std::min(buffer->getLength(), value));
 	position = (position >> 2) << 2;
 	
-	if (status == AS_STOP) {
-		status = AS_PAUSE;
+	if (status == STOP) {
+		status = PAUSE;
 	}
 }
 
@@ -114,8 +114,8 @@ void AudioSource::setProgress(float value) {
 	position = (position >> 2) << 2; // align to the channel and byte count
 	position = std::min(position, buffer->getLength());
 	
-	if (status == AS_STOP) {
-		status = AS_PAUSE;
+	if (status == STOP) {
+		status = PAUSE;
 	}
 }
 
