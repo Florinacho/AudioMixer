@@ -13,6 +13,8 @@ AudioSource::~AudioSource() {
 
 void AudioSource::setBuffer(AudioBuffer* value) {
 	buffer = value;
+	position = 0;
+	status = STOP;
 }
 
 AudioBuffer* AudioSource::getBuffer() const {
@@ -94,10 +96,13 @@ void AudioSource::setPosition(uint32_t value) {
 	}
 	
 	position = std::max(0u, std::min(buffer->getLength(), value));
-	position = (position >> 2) << 2;
+	position = (position >> 1) << 1;
 	
 	if (status == STOP) {
 		status = PAUSE;
+	}
+	if (position >= buffer->getLength()) {
+		status = STOP;
 	}
 }
 
@@ -111,7 +116,7 @@ void AudioSource::setProgress(float value) {
 	}
 	
 	position = (float)buffer->getLength() * std::min(1.0f, std::max(0.0f, value));
-	position = (position >> 2) << 2; // align to the channel and byte count
+	position = (position >> 1) << 1; // align to the channel and byte count
 	position = std::min(position, buffer->getLength());
 	
 	if (status == STOP) {

@@ -10,7 +10,7 @@ static bool WaveOutSetVolume(HWAVEOUT waveOut, float volume, float pan) {
 
 void CALLBACK waveOutProc(HWAVEOUT hwo, UINT uMsg, DWORD_PTR dwInstance, DWORD_PTR dwParam1, DWORD_PTR dwParam2) {
 	AudioMixer* mixer = (AudioMixer*)dwInstance;
-	
+
 	switch (uMsg) {
 	case WOM_DONE:
 		++mixer->freeBlocks;
@@ -21,62 +21,54 @@ void CALLBACK waveOutProc(HWAVEOUT hwo, UINT uMsg, DWORD_PTR dwInstance, DWORD_P
 
 void* AudioThreadProc(void* params) {
 	AudioMixer* mixer = (AudioMixer*)params;
-	
+
 	while(mixer->ready) {
 		if (mixer->freeBlocks == 0) {
 			pthread_mutex_lock(&mixer->freeBlocksMutex);
 			pthread_cond_wait(&mixer->freeBlocksCond, &mixer->freeBlocksMutex);
 		}
 		--mixer->freeBlocks;
-		
-		int32_t count = 0;
+
 		memset(mixer->accumulator, 0, sizeof(int32_t) * mixer->blockSize);
 
 		for (uint32_t index = 0; index < mixer->sources.size(); ++index) {
 			AudioSource* source = mixer->sources[index];
-			AudioBuffer* buffer = source->getBuffer();
+			const AudioBuffer* buffer = source->getBuffer();
+			const uint8_t* sampleBuffer = buffer->getData();
 			
-			switch (source->getStatus()) { 
-			case AudioSource::PLAY:
-				const uint8_t* sampleBuffer = buffer->getData();
-				const uint32_t position = source->getPosition();
-				source->setPosition(position + (float)mixer->blockSize * source->getSpeed());
+			const int32_t active = (source->getStatus() == AudioSource::PLAY);
+			const int32_t position = source->getPosition();
 
-				if (source->getPosition() >= buffer->getLength()) {
-					source->stop();
-					if (source->getLoop()) {
-						source->play();
-					} 
-				} else {
-					for (uint32_t sampleIndex = 0; sampleIndex < mixer->blockSize / 2; ++sampleIndex) {
-						mixer->accumulator[sampleIndex] += ((int16_t*)(sampleBuffer + position))[sampleIndex] * source->getVolume();
-					}
+			if (source->getPosition() >= buffer->getLength()) {
+				source->stop();
+				if (source->getLoop()) {
+					source->play();
 				}
-				count += 1;
-				break;
+			} else {
+				for (uint32_t sampleIndex = 0; sampleIndex < mixer->blockSize / 2; ++sampleIndex) {
+					mixer->accumulator[sampleIndex] += (active * ((int16_t*)(sampleBuffer + position))[sampleIndex] * source->getVolume());
+				}
 			}
+			
+			source->setPosition(position + (float)(mixer->blockSize * active) * source->getSpeed());
 		}
 
-		if (mixer->waveHeaders[mixer->blockIndex].dwFlags & WHDR_PREPARED) {
-			waveOutUnprepareHeader(mixer->waveOut, &mixer->waveHeaders[mixer->blockIndex], sizeof(WAVEHDR));
+		//if (mixer->waveHeaders[mixer->blockIndex].dwFlags & WHDR_PREPARED) {
+		//	waveOutUnprepareHeader(mixer->waveOut, &mixer->waveHeaders[mixer->blockIndex], sizeof(WAVEHDR));
+		//}
+
+		for (uint32_t index = 0; index < mixer->blockSize / 2; ++index) {
+			((int16_t*)(mixer->waveHeaderBuffer + mixer->blockIndex * mixer->blockSize))[index] = mixer->accumulator[index] / AUDIO_MIXER_MAX_SOURCE_COUNT;
 		}
 
-		if (count == 0) {
-			memset(mixer->waveHeaderBuffer + mixer->blockIndex * mixer->blockSize, 0, mixer->blockSize);
-		} else {
-			for (uint32_t index = 0; index < mixer->blockSize / 2; ++index) {
-				((int16_t*)(mixer->waveHeaderBuffer + mixer->blockIndex * mixer->blockSize))[index] = mixer->accumulator[index] / AUDIO_MIXER_MAX_SOURCE_COUNT;
-			}
-		}
-
-		waveOutPrepareHeader(mixer->waveOut, &mixer->waveHeaders[mixer->blockIndex], sizeof(WAVEHDR));
+		// waveOutPrepareHeader(mixer->waveOut, &mixer->waveHeaders[mixer->blockIndex], sizeof(WAVEHDR));
 		waveOutWrite(mixer->waveOut, &mixer->waveHeaders[mixer->blockIndex], sizeof(WAVEHDR));
-		
+
 		mixer->blockIndex = (mixer->blockIndex + 1) % mixer->blockCount;
-		
+
 		pthread_mutex_unlock(&mixer->freeBlocksMutex);
 	}
-	
+
 	return params;
 }
 
@@ -94,41 +86,41 @@ bool AudioMixer::create(uint32_t sampleRate, uint16_t bitsPerSample, uint16_t ch
 
 	blockCount = nblockCount;
 	blockSize = nchunkSize;
-	
+
 	waveHeaderBuffer = new uint8_t[blockCount * blockSize];
 	accumulator = new int32_t[blockSize];
 	waveHeaders = new WAVEHDR[blockCount];
-	
+
 	for (uint32_t index = 0; index < blockCount; ++index) {
 		waveHeaders[index].lpData = (char*)(waveHeaderBuffer + index * blockSize);
 		waveHeaders[index].dwBufferLength = blockSize;
 		waveHeaders[index].dwFlags = 0;
 		waveHeaders[index].dwLoops = 0;
-		
+
 		waveOutPrepareHeader(waveOut, &waveHeaders[index], sizeof(WAVEHDR));
 		waveOutWrite(waveOut, &waveHeaders[index], sizeof(WAVEHDR));
 	}
-	
+
 	freeBlocks = blockCount;
-	
+
 	ready = true;
 	blockIndex = 0;
 	freeBlocksMutex = PTHREAD_MUTEX_INITIALIZER;
 	freeBlocksCond = PTHREAD_COND_INITIALIZER;
 	pthread_create(&audioThread, nullptr, AudioThreadProc, this);
-	
+
 	return true;
 }
 
 void AudioMixer::destroy() {
 	ready = false;
 	pthread_join(audioThread, nullptr);
-	
+
 	for (uint32_t index = 0; index < blockCount; ++index) {
 		waveOutUnprepareHeader(waveOut, &waveHeaders[index], sizeof(WAVEHDR));
 	}
 	waveOutClose(waveOut);
-	
+
 	if (waveHeaders != nullptr) {
 		delete [] waveHeaders;
 	}
@@ -140,7 +132,7 @@ void AudioMixer::destroy() {
 	}
 }
 
-AudioMixer::AudioMixer(uint32_t samplesPerSec, uint16_t bitsPerSample, uint16_t channelCount, uint8_t nblockCount, uint32_t nchunkSize) 
+AudioMixer::AudioMixer(uint32_t samplesPerSec, uint16_t bitsPerSample, uint16_t channelCount, uint8_t nblockCount, uint32_t nchunkSize)
 	: samplesPerSec(samplesPerSec), bitsPerSample(bitsPerSample), channelCount(channelCount) {
 	create(samplesPerSec, bitsPerSample, channelCount, nblockCount, nchunkSize);
 }

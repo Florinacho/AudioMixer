@@ -88,11 +88,18 @@ bool AudioBuffer::load(const char* filename) {
 	channelCount = fmtChunk.numChannels;
 	
 	assert(fmtChunk.compressionCode == 1);
-	assert(fmtChunk.avgBytesPerSec == 176400);
-	assert(fmtChunk.blockAlign == 4);
 
 	if (fread(&dataChunk, sizeof(dataChunk), 1, file) != 1) {
 		goto EXIT_LABEL;
+	}
+
+	while (dataChunk.chunkId != 0x61746164) {
+		if (fseek(file, dataChunk.chunkDataSize, SEEK_CUR) != 0) {
+			goto EXIT_LABEL;
+		}
+		if (fread(&dataChunk, sizeof(dataChunk), 1, file) != 1) {
+			goto EXIT_LABEL;
+		}
 	}
 
 	if (dataChunk.chunkId != 0x61746164) {
